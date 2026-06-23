@@ -109,17 +109,18 @@ const ChefHat = makeIcon(<><path d="M6 13a4 4 0 0 1 .5-7.9A5 5 0 0 1 12 3a5 5 0 
 const PiggyBank = makeIcon(<><circle cx="17.5" cy="9" r="1" fill="currentColor" stroke="none" /><path d="M3 11c0-3 3-6 8-6 3.5 0 6 1.7 7 4h2l1 2-1.5 1.5H19v2.5l-2.5 1.5v2H8l-1-2H5l-1.5-2H3v-3.5Z" /></>);
 const ListChecks = makeIcon(<><path d="M4 6h2" /><path d="M9 6h11" /><path d="M4 12h2" /><path d="M9 12h11" /><path d="M4 18h2" /><path d="M9 18h11" /></>);
 const BookOpen = makeIcon(<><path d="M2 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H2Z" /><path d="M22 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8Z" /></>);
+const CalendarIcon = makeIcon(<><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></>);
 
 /* ---------------------------------------------------------------------- */
 /* Design tokens                                                          */
 /* ---------------------------------------------------------------------- */
 
-const INK = "#262220";
-const PAPER = "#F2EEE4";
+const INK = "#2B2A22";
+const PAPER = "#F1EDE2";
 const ACCENTS = {
-  habits:  { base: "#3F6B52", soft: "#E3EBE2", strong: "#2C4A3A" },
-  cooking: { base: "#C1622D", soft: "#F5E4D6", strong: "#7A3A18" },
-  finance: { base: "#A9791F", soft: "#F1E7C8", strong: "#6E4F16" },
+  habits:  { base: "#4A7359", soft: "#E2E9DD", strong: "#2F4A3A" },
+  cooking: { base: "#8A7A4E", soft: "#EFE7D3", strong: "#5C5031" },
+  finance: { base: "#6B7F4F", soft: "#E6EAD9", strong: "#3F4D2E" },
 };
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const PRESETS = [
@@ -221,11 +222,73 @@ function buildTrendSentence(habit, breakdown) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Calendar export (.ics) — works with Samsung Calendar, Google, Outlook, */
+/* iOS, anything that understands the standard iCalendar format           */
+/* ---------------------------------------------------------------------- */
+
+function nowStampUTC() {
+  return new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+function icsEscape(s) {
+  return String(s).replace(/([\\,;])/g, "\\$1").replace(/\n/g, "\\n");
+}
+function downloadIcs(filename, content) {
+  const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function buildSingleDayIcs({ title, description, planDate }) {
+  const start = planDate.replace(/-/g, "");
+  const end = dateStr(addDays(parseDate(planDate), 1)).replace(/-/g, "");
+  const lines = [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Three-Year Almanac//EN", "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${uid("evt")}@three-year-almanac`,
+    `DTSTAMP:${nowStampUTC()}`,
+    `DTSTART;VALUE=DATE:${start}`,
+    `DTEND;VALUE=DATE:${end}`,
+    `SUMMARY:${icsEscape(title)}`,
+  ];
+  if (description) lines.push(`DESCRIPTION:${icsEscape(description)}`);
+  lines.push("END:VEVENT", "END:VCALENDAR");
+  return lines.join("\r\n");
+}
+function nextDayOfMonth(day) {
+  const t = startOfToday();
+  let d = new Date(t.getFullYear(), t.getMonth(), day);
+  if (d < t) d = new Date(t.getFullYear(), t.getMonth() + 1, day);
+  return dateStr(d);
+}
+function buildMonthlyRecurringIcs({ title, description, startDate, dayOfMonth }) {
+  const start = startDate.replace(/-/g, "");
+  const end = dateStr(addDays(parseDate(startDate), 1)).replace(/-/g, "");
+  const lines = [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Three-Year Almanac//EN", "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${uid("evt")}@three-year-almanac`,
+    `DTSTAMP:${nowStampUTC()}`,
+    `DTSTART;VALUE=DATE:${start}`,
+    `DTEND;VALUE=DATE:${end}`,
+    `RRULE:FREQ=MONTHLY;BYMONTHDAY=${dayOfMonth}`,
+    `SUMMARY:${icsEscape(title)}`,
+  ];
+  if (description) lines.push(`DESCRIPTION:${icsEscape(description)}`);
+  lines.push("END:VEVENT", "END:VCALENDAR");
+  return lines.join("\r\n");
+}
+function imageUrlForSeed(seed, size = 200) {
+  return `https://picsum.photos/seed/${encodeURIComponent(seed || "cooking")}/${size}/${size}`;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Small UI atoms                                                          */
 /* ---------------------------------------------------------------------- */
 
 function Card({ children, className = "" }) {
-  return <div className={`bg-white/70 rounded-xl border border-black/5 shadow-sm ${className}`}>{children}</div>;
+  return <div className={`bg-[#FBF9F1]/80 rounded-xl border border-black/5 shadow-sm ${className}`}>{children}</div>;
 }
 
 function SectionTitle({ children, accent }) {
@@ -335,13 +398,9 @@ function App() {
   const [habitsData, setHabitsData] = useState({ habits: [], completions: {} });
   const [cookingData, setCookingData] = useState({ skills: [], plans: {} });
   const [financeData, setFinanceData] = useState({
-    settings: { goal: 5000, targetDate: "2029-06-17", startDate: "2026-06-17", payFrequency: "monthly", currency: "$", startingBalance: 0 },
+    settings: { goal: 5000, targetDate: "2029-06-17", startDate: "2026-06-17", payFrequency: "monthly", currency: "£", startingBalance: 0, reminderDay: 20 },
     contributions: [],
   });
-  const [apiKey, setApiKey] = useState(() => {
-    try { return localStorage.getItem("anthropic-api-key") || ""; } catch (e) { return ""; }
-  });
-
   useEffect(() => {
     function handler(e) { setAuthUser(e.detail.user); }
     window.addEventListener("authchange", handler);
@@ -363,10 +422,6 @@ function App() {
   const saveHabits = useCallback((data) => { setHabitsData(data); safeSet("habits-data", JSON.stringify(data)); }, []);
   const saveCooking = useCallback((data) => { setCookingData(data); safeSet("cooking-data", JSON.stringify(data)); }, []);
   const saveFinance = useCallback((data) => { setFinanceData(data); safeSet("finance-data", JSON.stringify(data)); }, []);
-  const saveApiKey = useCallback((key) => {
-    setApiKey(key);
-    try { localStorage.setItem("anthropic-api-key", key); } catch (e) {}
-  }, []);
 
   async function handleSignIn() {
     setAuthError("");
@@ -444,7 +499,7 @@ function App() {
         ) : (
           <>
             {tab === "habits" && <HabitsTab data={habitsData} onSave={saveHabits} accent={ACCENTS.habits} />}
-            {tab === "cooking" && <CookingTab data={cookingData} onSave={saveCooking} accent={ACCENTS.cooking} apiKey={apiKey} onSaveApiKey={saveApiKey} />}
+            {tab === "cooking" && <CookingTab data={cookingData} onSave={saveCooking} accent={ACCENTS.cooking} />}
             {tab === "finance" && <FinanceTab data={financeData} onSave={saveFinance} accent={ACCENTS.finance} />}
           </>
         )}
@@ -719,9 +774,8 @@ function HabitRow({ habit, accent, editing, onEdit, onUpdate, onArchive, onDelet
 /* COOKING TAB                                                             */
 /* ---------------------------------------------------------------------- */
 
-function CookingTab({ data, onSave, accent, apiKey, onSaveApiKey }) {
+function CookingTab({ data, onSave, accent }) {
   const [showSkills, setShowSkills] = useState(data.skills.length === 0);
-  const [showApiKey, setShowApiKey] = useState(!apiKey);
   const [newSkill, setNewSkill] = useState("");
   const [openYear, setOpenYear] = useState(MONTH_START.year);
 
@@ -732,17 +786,20 @@ function CookingTab({ data, onSave, accent, apiKey, onSaveApiKey }) {
   }
   function deleteSkill(id) { onSave({ ...data, skills: data.skills.filter((s) => s.id !== id) }); }
 
-  function emptyPlan() { return { skillId: "", customName: "", plannedDate: "", notes: "", recipes: [], completed: false }; }
+  function emptyPlan() { return { skillId: "", customName: "", plannedDate: "", notes: "", completed: false }; }
 
   function autoFill() {
     if (data.skills.length === 0) return;
+    const usedSkillIds = new Set(Object.values(data.plans).map((p) => p.skillId).filter(Boolean));
+    const availableSkills = data.skills.filter((s) => !usedSkillIds.has(s.id));
+    if (availableSkills.length === 0) return;
     const plans = { ...data.plans };
     let i = 0;
     ALL_MONTHS.forEach(({ year, month }) => {
+      if (i >= availableSkills.length) return;
       const key = monthKey(year, month);
       if (!plans[key] || !plans[key].skillId) {
-        const skill = data.skills[i % data.skills.length];
-        plans[key] = { ...(plans[key] || emptyPlan()), skillId: skill.id };
+        plans[key] = { ...(plans[key] || emptyPlan()), skillId: availableSkills[i].id };
         i++;
       }
     });
@@ -771,23 +828,6 @@ function CookingTab({ data, onSave, accent, apiKey, onSaveApiKey }) {
       </Card>
 
       <div>
-        <button onClick={() => setShowApiKey((s) => !s)} className="flex items-center gap-1.5 text-sm font-medium mb-3" style={{ color: accent.strong }}>
-          {showApiKey ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Recipe-suggestion API key {apiKey ? "(set)" : "(not set)"}
-        </button>
-        {showApiKey && (
-          <Card className="p-4 space-y-2">
-            <p className="text-xs text-black/50">
-              The "Suggest recipes" button calls Claude's API directly from this page using your own key.
-              It's saved only in this browser's local storage — never written into the page itself, never sent anywhere except straight to Anthropic.
-            </p>
-            <TextField label="Anthropic API key" type="password" value={apiKey} onChange={(e) => onSaveApiKey(e.target.value)} placeholder="sk-ant-..." />
-            <p className="text-xs text-black/40">Get one at <a href="https://console.anthropic.com" target="_blank" rel="noopener" className="underline">console.anthropic.com</a>. Usage is billed to your own account.</p>
-          </Card>
-        )}
-      </div>
-
-      <div>
         <button onClick={() => setShowSkills((s) => !s)} className="flex items-center gap-1.5 text-sm font-medium mb-3" style={{ color: accent.strong }}>
           {showSkills ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           Things you want to learn to cook
@@ -795,7 +835,7 @@ function CookingTab({ data, onSave, accent, apiKey, onSaveApiKey }) {
         {showSkills && (
           <Card className="p-4 space-y-3">
             {data.skills.length === 0 && (
-              <p className="text-sm text-black/50">List the basics you want to learn — e.g. bread, knife skills, stock. I'll spread them across the next three years and suggest recipes for each.</p>
+              <p className="text-sm text-black/50">List the basics you want to learn — e.g. bread, knife skills, stock. I'll spread them across the next three years, one idea per month.</p>
             )}
             <div className="flex gap-2">
               <TextField placeholder="e.g. Homemade bread" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSkill()} />
@@ -810,7 +850,7 @@ function CookingTab({ data, onSave, accent, apiKey, onSaveApiKey }) {
                 ))}
               </ul>
             )}
-            {data.skills.length > 0 && <button onClick={autoFill} className="text-sm font-medium underline" style={{ color: accent.strong }}>Auto-fill empty months by cycling through this list</button>}
+            {data.skills.length > 0 && <button onClick={autoFill} className="text-sm font-medium underline" style={{ color: accent.strong }}>Auto-fill empty months — each idea used once</button>}
           </Card>
         )}
       </div>
@@ -826,7 +866,8 @@ function CookingTab({ data, onSave, accent, apiKey, onSaveApiKey }) {
                 {monthsByYear(y).map(({ year, month }) => {
                   const key = monthKey(year, month);
                   return (
-                    <MonthCard key={key} label={monthLabel(year, month)} plan={data.plans[key] || emptyPlan()} skills={data.skills} accent={accent} apiKey={apiKey}
+                    <MonthCard key={key} label={monthLabel(year, month)} plan={data.plans[key] || emptyPlan()} skills={data.skills}
+                      accent={accent} allPlans={data.plans} planKey={key}
                       onCommit={(updates) => commitPlan(key, updates)} />
                   );
                 })}
@@ -839,74 +880,45 @@ function CookingTab({ data, onSave, accent, apiKey, onSaveApiKey }) {
   );
 }
 
-function MonthCard({ label, plan, skills, accent, onCommit, apiKey }) {
+function MonthCard({ label, plan, skills, accent, onCommit, allPlans, planKey }) {
   const [expanded, setExpanded] = useState(false);
   const [customName, setCustomName] = useState(plan.customName || "");
   const [notes, setNotes] = useState(plan.notes || "");
   const [plannedDate, setPlannedDate] = useState(plan.plannedDate || "");
-  const [newRecipe, setNewRecipe] = useState("");
-  const [loadingRecipes, setLoadingRecipes] = useState(false);
-  const [recipeError, setRecipeError] = useState("");
 
   const skillName = plan.skillId ? (skills.find((s) => s.id === plan.skillId)?.name || "") : customName;
 
-  function addManualRecipe() {
-    if (!newRecipe.trim()) return;
-    onCommit({ recipes: [...(plan.recipes || []), { id: uid("r"), name: newRecipe.trim(), description: "" }] });
-    setNewRecipe("");
-  }
-  function removeRecipe(id) { onCommit({ recipes: plan.recipes.filter((r) => r.id !== id) }); }
+  const usedElsewhere = new Set(
+    Object.entries(allPlans || {}).filter(([k]) => k !== planKey).map(([, p]) => p.skillId).filter(Boolean)
+  );
+  const availableSkills = skills.filter((s) => s.id === plan.skillId || !usedElsewhere.has(s.id));
 
-  async function suggestRecipes() {
-    const theme = plan.skillId ? skills.find((s) => s.id === plan.skillId)?.name : customName;
-    if (!theme || !theme.trim()) { setRecipeError("Set a skill or theme for this month first."); return; }
-    if (!apiKey) { setRecipeError("Add your Anthropic API key above (in the Cooking tab) first."); return; }
-    setLoadingRecipes(true);
-    setRecipeError("");
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          messages: [{
-            role: "user",
-            content: `Suggest 4 beginner-friendly recipe ideas for someone practicing the cooking skill/theme "${theme}" at home. Respond with ONLY a raw JSON array, no markdown fences, no preamble, in exactly this format: [{"name":"Recipe name","description":"one short line, under 14 words"}]`,
-          }],
-        }),
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody?.error?.message || `Request failed (${res.status})`);
-      }
-      const json = await res.json();
-      const text = (json.content || []).map((b) => b.text || "").join("");
-      const clean = text.replace(/```json|```/g, "").trim();
-      const ideas = JSON.parse(clean);
-      const newRecipes = ideas.map((idea) => ({ id: uid("r"), name: idea.name, description: idea.description || "" }));
-      onCommit({ recipes: [...(plan.recipes || []), ...newRecipes] });
-    } catch (e) {
-      setRecipeError(e.message || "Couldn't fetch suggestions right now — try again in a moment.");
-    } finally {
-      setLoadingRecipes(false);
-    }
+  function addToCalendar() {
+    if (!plannedDate) return;
+    const ics = buildSingleDayIcs({
+      title: `Cook: ${skillName || "Cooking session"}`,
+      description: notes || "",
+      planDate: plannedDate,
+    });
+    downloadIcs(`cooking-${plannedDate}.ics`, ics);
   }
 
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
-        <button onClick={() => setExpanded((e) => !e)} className="flex-1 text-left">
-          <div className="flex items-center gap-2">
-            <span className="font-display text-base font-semibold">{label}</span>
-            {plan.completed && <Check className="w-4 h-4" style={{ color: accent.base }} />}
+        <button onClick={() => setExpanded((e) => !e)} className="flex-1 text-left flex items-center gap-3">
+          {skillName && (
+            <img src={imageUrlForSeed(skillName, 96)} alt="" loading="lazy"
+              className="w-11 h-11 rounded-lg object-cover shrink-0 bg-black/5"
+              onError={(e) => { e.target.style.display = "none"; }} />
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-display text-base font-semibold">{label}</span>
+              {plan.completed && <Check className="w-4 h-4" style={{ color: accent.base }} />}
+            </div>
+            <div className="text-sm text-black/50 mt-0.5 truncate">{skillName ? skillName : "Not planned yet"}</div>
           </div>
-          <div className="text-sm text-black/50 mt-0.5">{skillName ? skillName : "Not planned yet"}</div>
         </button>
         <TickStamp checked={plan.completed} onClick={() => onCommit({ completed: !plan.completed })} accent={accent} />
       </div>
@@ -917,52 +929,32 @@ function MonthCard({ label, plan, skills, accent, onCommit, apiKey }) {
             <span className="text-xs font-medium text-black/50 block mb-1">Skill / theme</span>
             <select value={plan.skillId || ""} onChange={(e) => onCommit({ skillId: e.target.value, customName: e.target.value ? "" : customName })}
               className="w-full px-3 py-2 rounded-lg border border-black/15 bg-white text-sm">
-              <option value="">{skills.length ? "— choose from your list —" : "No skills added yet"}</option>
-              {skills.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              <option value="">{availableSkills.length ? "— choose from your list —" : "No unused ideas left"}</option>
+              {availableSkills.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+            {skills.length > availableSkills.length && (
+              <span className="text-xs text-black/40 mt-1 block">Ideas already used elsewhere are hidden — each one only gets scheduled once.</span>
+            )}
           </label>
 
           {!plan.skillId && (
             <TextField label="Or type a custom theme for this month" value={customName} onChange={(e) => setCustomName(e.target.value)} onBlur={() => onCommit({ customName })} placeholder="e.g. Try a new cuisine" />
           )}
 
-          <TextField label="Planned date this month" type="date" value={plannedDate} onChange={(e) => { setPlannedDate(e.target.value); onCommit({ plannedDate: e.target.value }); }} />
+          <div>
+            <TextField label="Planned date this month" type="date" value={plannedDate} onChange={(e) => { setPlannedDate(e.target.value); onCommit({ plannedDate: e.target.value }); }} />
+            <button onClick={addToCalendar} disabled={!plannedDate}
+              className="mt-2 flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full disabled:opacity-40"
+              style={{ backgroundColor: accent.soft, color: accent.strong }}>
+              <CalendarIcon className="w-3.5 h-3.5" /> Add to calendar
+            </button>
+          </div>
 
           <label className="block">
             <span className="text-xs font-medium text-black/50 block mb-1">Notes</span>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={() => onCommit({ notes })} rows={2}
               className="w-full px-3 py-2 rounded-lg border border-black/15 bg-white text-sm" placeholder="Who's coming, what to prep ahead…" />
           </label>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-black/50">Recipe ideas</span>
-              <button onClick={suggestRecipes} disabled={loadingRecipes} className="flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full disabled:opacity-50" style={{ backgroundColor: accent.soft, color: accent.strong }}>
-                {loadingRecipes ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Suggest recipes
-              </button>
-            </div>
-            {recipeError && <p className="text-xs text-red-600 mb-2">{recipeError}</p>}
-            {(plan.recipes || []).length === 0 ? (
-              <p className="text-xs text-black/40">No recipe ideas yet — tap "Suggest recipes" or add your own below.</p>
-            ) : (
-              <ul className="space-y-1.5 mb-2">
-                {plan.recipes.map((r) => (
-                  <li key={r.id} className="flex items-start gap-2 text-sm bg-black/[0.03] rounded-lg px-3 py-2">
-                    <BookOpen className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: accent.base }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium">{r.name}</div>
-                      {r.description && <div className="text-xs text-black/50">{r.description}</div>}
-                    </div>
-                    <button onClick={() => removeRecipe(r.id)}><X className="w-3.5 h-3.5 text-black/30" /></button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex gap-2">
-              <TextField placeholder="Add your own idea" value={newRecipe} onChange={(e) => setNewRecipe(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addManualRecipe()} />
-              <button onClick={addManualRecipe} className="px-3 rounded-lg border border-black/15 shrink-0"><Plus className="w-4 h-4" /></button>
-            </div>
-          </div>
         </div>
       )}
     </Card>
@@ -981,6 +973,7 @@ function FinanceTab({ data, onSave, accent }) {
   const [currency, setCurrency] = useState(settings.currency);
   const [payFrequency, setPayFrequency] = useState(settings.payFrequency);
   const [startingBalance, setStartingBalance] = useState(settings.startingBalance || 0);
+  const [reminderDay, setReminderDay] = useState(settings.reminderDay || 20);
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState("");
@@ -1003,13 +996,29 @@ function FinanceTab({ data, onSave, accent }) {
   const nextDue = addPeriod(lastDate, settings.payFrequency);
   const showReminder = todayStr() >= nextDue;
 
+  function isValidAmount(v) { return v !== "" && !isNaN(Number(v)) && Number(v) >= 0; }
+
   function addContribution() {
-    const amt = Number(amount);
-    if (!amt || amt <= 0 || !date) return;
-    onSave({ ...data, contributions: [...contributions, { id: uid("c"), amount: amt, date, note: note.trim() }] });
+    if (!isValidAmount(amount) || !date) return;
+    onSave({ ...data, contributions: [...contributions, { id: uid("c"), amount: Number(amount), date, note: note.trim() }] });
+    setAmount(""); setNote("");
+  }
+  function logNoContribution() {
+    onSave({ ...data, contributions: [...contributions, { id: uid("c"), amount: 0, date: todayStr(), note: note.trim() || "No contribution this month" }] });
     setAmount(""); setNote("");
   }
   function deleteContribution(id) { onSave({ ...data, contributions: contributions.filter((c) => c.id !== id) }); }
+
+  function downloadSavingsReminder() {
+    const first = nextDayOfMonth(Number(reminderDay) || 20);
+    const ics = buildMonthlyRecurringIcs({
+      title: "Add your savings contribution",
+      description: "Log this month's amount in your Three-Year Almanac — enter £0 if nothing went in this month.",
+      startDate: first,
+      dayOfMonth: Number(reminderDay) || 20,
+    });
+    downloadIcs("savings-reminder.ics", ics);
+  }
 
   const sorted = [...contributions].sort((a, b) => (a.date < b.date ? -1 : 1));
   const chartData = useMemo(() => {
@@ -1057,9 +1066,22 @@ function FinanceTab({ data, onSave, accent }) {
 
       {showReminder && (
         <Card className="p-4" style={{ backgroundColor: accent.soft, borderColor: accent.base }}>
-          <p className="text-sm font-medium" style={{ color: accent.strong }}>Looks like payday's come around — log this period's contribution below.</p>
+          <p className="text-sm font-medium" style={{ color: accent.strong }}>Looks like payday's come around — log this period's contribution below (or £0 if nothing went in).</p>
         </Card>
       )}
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <SectionTitle accent={accent}>Get a phone reminder</SectionTitle>
+        </div>
+        <p className="text-xs text-black/50 mb-3">Downloads a recurring calendar event, monthly, on the day below. Open the file on your phone and it'll offer to add it to whatever calendar app you use (Samsung Calendar, Google Calendar, etc).</p>
+        <div className="flex items-end gap-2">
+          <TextField label="Day of month" type="number" min="1" max="28" value={reminderDay} onChange={(e) => setReminderDay(e.target.value)} onBlur={() => commitSettings({ reminderDay: Number(reminderDay) || 20 })} className="w-24" />
+          <button onClick={downloadSavingsReminder} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: accent.base }}>
+            <CalendarIcon className="w-4 h-4" /> Download reminder
+          </button>
+        </div>
+      </Card>
 
       <Card className="p-4">
         <SectionTitle accent={accent}>Log a contribution</SectionTitle>
@@ -1068,9 +1090,14 @@ function FinanceTab({ data, onSave, accent }) {
           <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <TextField label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Payslip — June" />
-        <button onClick={addContribution} disabled={!amount || Number(amount) <= 0} className="mt-3 flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40" style={{ backgroundColor: accent.base }}>
-          <Plus className="w-4 h-4" /> Add contribution
-        </button>
+        <div className="flex items-center gap-3 mt-3">
+          <button onClick={addContribution} disabled={!isValidAmount(amount)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-40" style={{ backgroundColor: accent.base }}>
+            <Plus className="w-4 h-4" /> Add contribution
+          </button>
+          <button onClick={logNoContribution} className="text-xs font-medium underline" style={{ color: accent.strong }}>
+            No contribution this month
+          </button>
+        </div>
       </Card>
 
       {contributions.length > 0 && (
