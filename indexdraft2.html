@@ -279,9 +279,6 @@ function buildMonthlyRecurringIcs({ title, description, startDate, dayOfMonth })
   lines.push("END:VEVENT", "END:VCALENDAR");
   return lines.join("\r\n");
 }
-function imageUrlForSeed(seed, size = 200) {
-  return `https://picsum.photos/seed/${encodeURIComponent(seed || "cooking")}/${size}/${size}`;
-}
 
 /* ---------------------------------------------------------------------- */
 /* Small UI atoms                                                          */
@@ -907,11 +904,6 @@ function MonthCard({ label, plan, skills, accent, onCommit, allPlans, planKey })
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <button onClick={() => setExpanded((e) => !e)} className="flex-1 text-left flex items-center gap-3">
-          {skillName && (
-            <img src={imageUrlForSeed(skillName, 96)} alt="" loading="lazy"
-              className="w-11 h-11 rounded-lg object-cover shrink-0 bg-black/5"
-              onError={(e) => { e.target.style.display = "none"; }} />
-          )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-display text-base font-semibold">{label}</span>
